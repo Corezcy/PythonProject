@@ -446,80 +446,93 @@ def process_epub_to_tts(epub_path: str, output_dir: str = OUTPUT_DIR,
 
 def main() -> None:
     """Main entry point"""
-    import sys
+    import argparse
     
-    # Check if EPUB file path is provided
-    if len(sys.argv) < 2:
-        print("Usage: python epub_to_tts.py <epub_file_path> [voice] [output_dir] [max_threads] [--subtitles] [--mp4] [--force-split] [--chunk-size SIZE]")
-        print("\nExamples:")
-        print("  python epub_to_tts.py book.epub")
-        print("  python epub_to_tts.py book.epub --subtitles --mp4")
-        print("  python epub_to_tts.py book.epub --force-split")
-        print("  python epub_to_tts.py book.epub --force-split --chunk-size 5000")
-        print("  python epub_to_tts.py book.epub zh-CN-YunxiNeural ./output 10 --subtitles")
-        print("\nCommon voices:")
-        print("  Chinese: zh-CN-XiaoxiaoNeural (female), zh-CN-YunxiNeural (male)")
-        print("  English: en-US-JennyNeural (female), en-US-GuyNeural (male)")
-        print("  Use 'edge-tts --list-voices' to see all available voices")
-        print(f"\nDefault concurrent threads: {MAX_THREADS}")
-        print(f"Default chunk size: {CHUNK_SIZE} characters")
-        print("\nOptions:")
-        print("  --subtitles       Generate VTT subtitle files for each audio chunk")
-        print("  --mp4             Convert MP3+VTT to MP4 with minimal video (requires --subtitles)")
-        print("  --force-split     Force split by character count instead of chapters (default: by chapters)")
-        print("  --chunk-size N    Set chunk size to N characters (default: 10000)")
-        sys.exit(1)
+    # Create argument parser
+    parser = argparse.ArgumentParser(
+        description='EPUB to TTS Converter - Convert EPUB books to audio with optional subtitles and video',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  %(prog)s book.epub
+  %(prog)s book.epub --subtitles --mp4
+  %(prog)s book.epub --voice zh-CN-YunxiNeural --threads 10
+  %(prog)s book.epub --force-split --chunk-size 5000
+  %(prog)s book.epub --output ./my_output --subtitles --mp4
+
+Common voices:
+  Chinese: zh-CN-XiaoxiaoNeural (female), zh-CN-YunxiNeural (male)
+  English: en-US-JennyNeural (female), en-US-GuyNeural (male)
+  List all: edge-tts --list-voices
+        '''
+    )
     
-    epub_path = sys.argv[1]
+    # Required arguments
+    parser.add_argument('epub_file', 
+                       help='Path to the EPUB file to convert')
     
-    # Parse flags
-    generate_subtitles = '--subtitles' in sys.argv
-    convert_to_mp4_flag = '--mp4' in sys.argv
-    force_split = '--force-split' in sys.argv
+    # Optional arguments
+    parser.add_argument('-v', '--voice',
+                       default=VOICE,
+                       help=f'Voice to use for TTS (default: {VOICE})')
     
-    # Parse chunk size
-    chunk_size = CHUNK_SIZE
-    if '--chunk-size' in sys.argv:
-        try:
-            chunk_size_idx = sys.argv.index('--chunk-size')
-            if chunk_size_idx + 1 < len(sys.argv):
-                chunk_size = int(sys.argv[chunk_size_idx + 1])
-        except (ValueError, IndexError):
-            print("Error: Invalid --chunk-size value")
-            sys.exit(1)
+    parser.add_argument('-o', '--output',
+                       default=OUTPUT_DIR,
+                       help=f'Output directory for generated files (default: {OUTPUT_DIR})')
     
-    # Remove flags from argv for easier parsing
-    args = [arg for arg in sys.argv[1:] if arg not in ['--subtitles', '--mp4', '--force-split', '--chunk-size'] and not arg.isdigit() or arg == sys.argv[1]]
-    # Remove chunk size value if present
-    if '--chunk-size' in sys.argv:
-        chunk_size_idx = sys.argv.index('--chunk-size')
-        if chunk_size_idx + 1 < len(sys.argv) and sys.argv[chunk_size_idx + 1].isdigit():
-            chunk_size_val = sys.argv[chunk_size_idx + 1]
-            if chunk_size_val in args:
-                args.remove(chunk_size_val)
+    parser.add_argument('-t', '--threads',
+                       type=int,
+                       default=MAX_THREADS,
+                       help=f'Maximum number of concurrent threads (default: {MAX_THREADS})')
     
-    voice = args[1] if len(args) > 1 else VOICE
-    output_dir = args[2] if len(args) > 2 else OUTPUT_DIR
-    max_threads = int(args[3]) if len(args) > 3 else MAX_THREADS
+    parser.add_argument('-c', '--chunk-size',
+                       type=int,
+                       default=CHUNK_SIZE,
+                       help=f'Maximum characters per chunk (default: {CHUNK_SIZE})')
+    
+    # Flags
+    parser.add_argument('-s', '--subtitles',
+                       action='store_true',
+                       help='Generate VTT subtitle files for each audio chunk')
+    
+    parser.add_argument('-m', '--mp4',
+                       action='store_true',
+                       help='Convert MP3+VTT to MP4 with minimal video (requires --subtitles)')
+    
+    parser.add_argument('-f', '--force-split',
+                       action='store_true',
+                       help='Force split by character count instead of chapters')
+    
+    # Parse arguments
+    args = parser.parse_args()
     
     # Check if file exists
-    if not os.path.exists(epub_path):
-        print(f"Error: File '{epub_path}' not found!")
-        sys.exit(1)
+    if not os.path.exists(args.epub_file):
+        parser.error(f"File '{args.epub_file}' not found!")
     
     # Show configuration
     print(f"Configuration:")
-    print(f"  Voice: {voice}")
-    print(f"  Output directory: {output_dir}")
-    print(f"  Max threads: {max_threads}")
-    print(f"  Chunk size: {chunk_size} characters")
-    print(f"  Split mode: {'By character count' if force_split else 'By chapters'}")
-    print(f"  Generate subtitles: {'Yes' if generate_subtitles else 'No'}")
-    print(f"  Convert to MP4: {'Yes' if convert_to_mp4_flag else 'No'}")
+    print(f"  EPUB file: {args.epub_file}")
+    print(f"  Voice: {args.voice}")
+    print(f"  Output directory: {args.output}")
+    print(f"  Max threads: {args.threads}")
+    print(f"  Chunk size: {args.chunk_size} characters")
+    print(f"  Split mode: {'By character count' if args.force_split else 'By chapters'}")
+    print(f"  Generate subtitles: {'Yes' if args.subtitles else 'No'}")
+    print(f"  Convert to MP4: {'Yes' if args.mp4 else 'No'}")
     print()
     
     # Process the EPUB file
-    process_epub_to_tts(epub_path, output_dir, voice, max_threads, generate_subtitles, convert_to_mp4_flag, force_split, chunk_size)
+    process_epub_to_tts(
+        epub_path=args.epub_file,
+        output_dir=args.output,
+        voice=args.voice,
+        max_threads=args.threads,
+        generate_subtitles=args.subtitles,
+        convert_to_mp4_flag=args.mp4,
+        force_split=args.force_split,
+        chunk_size=args.chunk_size
+    )
 
 
 """
@@ -527,9 +540,11 @@ def main() -> None:
 
 基本用法 / Basic Usage:
     python epub_to_tts.py book.epub
+    python epub_to_tts.py book.epub -s -m           # 生成字幕和 MP4
 
 完整功能 / Full Features:
     python epub_to_tts.py book.epub --subtitles --mp4
+    python epub_to_tts.py book.epub -s -m           # 简写形式
 
 拆分模式 / Split Modes:
     # 默认：按章节拆分 (推荐)
@@ -537,18 +552,35 @@ def main() -> None:
     
     # 强制按字数拆分
     python epub_to_tts.py book.epub --force-split
+    python epub_to_tts.py book.epub -f              # 简写形式
     
     # 自定义分块大小 (5000 字符)
-    python epub_to_tts.py book.epub --force-split --chunk-size 5000
+    python epub_to_tts.py book.epub -f --chunk-size 5000
+    python epub_to_tts.py book.epub -f -c 5000      # 简写形式
 
 高级选项 / Advanced Options:
-    python epub_to_tts.py book.epub zh-CN-YunxiNeural ./output 10 --subtitles --mp4
-    # book.epub: EPUB 文件路径
-    # zh-CN-YunxiNeural: 语音选择 (男声)
-    # ./output: 输出目录
-    # 10: 线程数
-    # --subtitles: 生成 VTT 字幕
-    # --mp4: 转换为 MP4 视频
+    # 完整参数名
+    python epub_to_tts.py book.epub --voice zh-CN-YunxiNeural --output ./output --threads 10 --subtitles --mp4
+    
+    # 简写形式
+    python epub_to_tts.py book.epub -v zh-CN-YunxiNeural -o ./output -t 10 -s -m
+    
+    # 混合使用
+    python epub_to_tts.py book.epub -v zh-CN-YunxiNeural -o ./output -t 10 --subtitles --mp4
+
+参数说明 / Parameters:
+    必需参数:
+        epub_file               EPUB 文件路径
+    
+    可选参数:
+        -v, --voice            TTS 语音 (默认: zh-CN-XiaoxiaoNeural)
+        -o, --output           输出目录 (默认: tts_output)
+        -t, --threads          线程数 (默认: 8)
+        -c, --chunk-size       分块大小 (默认: 10000)
+        -s, --subtitles        生成 VTT 字幕
+        -m, --mp4              转换为 MP4 (需要 --subtitles)
+        -f, --force-split      强制按字数拆分
+        -h, --help             显示帮助信息
 
 常用语音 / Common Voices:
     中文: zh-CN-XiaoxiaoNeural (女), zh-CN-YunxiNeural (男)
@@ -556,9 +588,9 @@ def main() -> None:
     查看所有: edge-tts --list-voices
 
 输出文件 / Output Files:
-    - book_part_001.mp3  # 音频文件
-    - book_part_001.vtt  # 字幕文件 (使用 --subtitles)
-    - book_part_001.mp4  # 视频文件 (使用 --mp4)
+    - book_part_001.mp3     # 音频文件
+    - book_part_001.vtt     # 字幕文件 (使用 -s/--subtitles)
+    - book_part_001.mp4     # 视频文件 (使用 -m/--mp4)
 
 工具脚本 / Helper Scripts:
     # 批量转换已有的 MP3+VTT 为 MP4
@@ -566,6 +598,11 @@ def main() -> None:
 
 依赖安装 / Install Dependencies:
     pip install -r requirements_epub_tts.txt
+
+提示 / Tips:
+    1. 所有参数可以任意顺序排列
+    2. 支持完整参数名和简写形式
+    3. 使用 -h 或 --help 查看详细帮助
 """
 
 if __name__ == "__main__":
