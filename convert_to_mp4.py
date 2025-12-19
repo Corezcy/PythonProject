@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Batch convert MP3+VTT files to MP4 with minimal video quality
+Batch convert MP3+SRT files to MP4 with minimal video quality
 """
 
 import os
@@ -18,14 +18,14 @@ def thread_safe_print(*args, **kwargs):
     with print_lock:
         print(*args, **kwargs)
 
-def convert_to_mp4(mp3_file: str, vtt_file: str, mp4_file: str) -> tuple[bool, str]:
-    """Convert MP3 + VTT to MP4 with minimal video quality using ffmpeg."""
+def convert_to_mp4(mp3_file: str, srt_file: str, mp4_file: str) -> tuple[bool, str]:
+    """Convert MP3 + SRT to MP4 with minimal video quality using ffmpeg."""
     try:
         cmd = [
             'ffmpeg',
-            '-f', 'lavfi', '-i', 'color=c=black:s=16x16:r=1',
+            '-f', 'lavfi', '-i', 'color=c=black:s=320x240:r=1',  # 4:3 aspect ratio
             '-i', mp3_file,
-            '-i', vtt_file,
+            '-i', srt_file,
             '-map', '0:v:0', '-map', '1:a:0', '-map', '2:s:0',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '51',
             '-c:a', 'copy',
@@ -45,16 +45,16 @@ def convert_to_mp4(mp3_file: str, vtt_file: str, mp4_file: str) -> tuple[bool, s
         return (False, f"✗ {os.path.basename(mp4_file)}: {e}")
 
 def process_file(mp3_file: str, output_dir: str, total: int, index: int) -> tuple[bool, str]:
-    """Process a single MP3+VTT pair."""
+    """Process a single MP3+SRT pair."""
     base_name = os.path.splitext(os.path.basename(mp3_file))[0]
-    vtt_file = os.path.join(output_dir, f"{base_name}.vtt")
+    srt_file = os.path.join(output_dir, f"{base_name}.srt")
     mp4_file = os.path.join(output_dir, f"{base_name}.mp4")
     
-    if not os.path.exists(vtt_file):
-        return (False, f"✗ VTT not found for {base_name}")
+    if not os.path.exists(srt_file):
+        return (False, f"✗ SRT not found for {base_name}")
     
     thread_safe_print(f"[{index}/{total}] Converting {base_name}...")
-    success, message = convert_to_mp4(mp3_file, vtt_file, mp4_file)
+    success, message = convert_to_mp4(mp3_file, srt_file, mp4_file)
     thread_safe_print(f"  {message}")
     
     return (success, message)

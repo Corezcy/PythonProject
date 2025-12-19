@@ -173,7 +173,7 @@ def split_chapters_by_size(chapters: list[tuple[str, str]], chunk_size: int = CH
 
 
 def text_to_speech_sync(text: str, output_file: str, voice: str = VOICE, 
-                        vtt_file: str = None) -> None:
+                        srt_file: str = None) -> None:
     """
     Convert text to speech using edge-tts and save to file.
     This is a synchronous wrapper around the async function.
@@ -182,7 +182,7 @@ def text_to_speech_sync(text: str, output_file: str, voice: str = VOICE,
         text: Text to convert
         output_file: Output audio file path
         voice: Voice to use for TTS
-        vtt_file: Optional VTT subtitle file path
+        srt_file: Optional SRT subtitle file path
     """
     async def _async_tts():
         communicate = edge_tts.Communicate(text, voice)
@@ -195,9 +195,9 @@ def text_to_speech_sync(text: str, output_file: str, voice: str = VOICE,
                 elif chunk["type"] in ("WordBoundary", "SentenceBoundary"):
                     submaker.feed(chunk)
         
-        # Save VTT subtitle if requested
-        if vtt_file:
-            with open(vtt_file, "w", encoding="utf-8") as subtitle_file:
+        # Save SRT subtitle if requested
+        if srt_file:
+            with open(srt_file, "w", encoding="utf-8") as subtitle_file:
                 subtitle_file.write(submaker.get_srt())
     
     # Run the async function in a new event loop
@@ -215,22 +215,22 @@ def process_chunk(chunk_data: tuple, epub_filename: str, output_dir: str,
         output_dir: Directory to save output files
         voice: Voice to use for TTS
         total_chunks: Total number of chunks
-        generate_subtitles: Whether to generate VTT subtitles
+        generate_subtitles: Whether to generate SRT subtitles
         
     Returns:
         Tuple of (chunk_num, success, message)
     """
     i, chunk = chunk_data
     output_file = os.path.join(output_dir, f"{epub_filename}_part_{i:03d}.mp3")
-    vtt_file = os.path.join(output_dir, f"{epub_filename}_part_{i:03d}.vtt") if generate_subtitles else None
+    srt_file = os.path.join(output_dir, f"{epub_filename}_part_{i:03d}.srt") if generate_subtitles else None
     
     thread_safe_print(f"[Thread] Processing chunk {i}/{total_chunks} ({len(chunk)} chars) -> {output_file}")
     
     try:
-        text_to_speech_sync(chunk, output_file, voice, vtt_file)
+        text_to_speech_sync(chunk, output_file, voice, srt_file)
         message = f"✓ Successfully created {output_file}"
-        if vtt_file:
-            message += f" + {os.path.basename(vtt_file)}"
+        if srt_file:
+            message += f" + {os.path.basename(srt_file)}"
         thread_safe_print(f"  {message}")
         return (i, True, message)
     except Exception as e:
@@ -239,25 +239,25 @@ def process_chunk(chunk_data: tuple, epub_filename: str, output_dir: str,
         return (i, False, message)
 
 
-def convert_to_mp4(mp3_file: str, vtt_file: str, mp4_file: str) -> tuple[bool, str]:
+def convert_to_mp4(mp3_file: str, srt_file: str, mp4_file: str) -> tuple[bool, str]:
     """
-    Convert MP3 + VTT to MP4 with minimal video quality using ffmpeg.
+    Convert MP3 + SRT to MP4 with minimal video quality using ffmpeg.
     
     Args:
         mp3_file: Path to MP3 audio file
-        vtt_file: Path to VTT subtitle file
+        srt_file: Path to SRT subtitle file
         mp4_file: Path to output MP4 file
         
     Returns:
         Tuple of (success, message)
     """
     try:
-        # FFmpeg command with minimal video quality
+        # FFmpeg command with minimal video quality (4:3 aspect ratio)
         cmd = [
             'ffmpeg',
-            '-f', 'lavfi', '-i', 'color=c=black:s=16x16:r=1',  # Minimal black video
+            '-f', 'lavfi', '-i', 'color=c=black:s=320x240:r=1',  # 4:3 aspect ratio black video
             '-i', mp3_file,  # Audio input
-            '-i', vtt_file,  # Subtitle input
+            '-i', srt_file,  # Subtitle input
             '-map', '0:v:0', '-map', '1:a:0', '-map', '2:s:0',  # Map video, audio, subtitle
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '51',  # Minimal video quality
             '-c:a', 'copy',  # Copy audio without re-encoding
@@ -289,7 +289,7 @@ def convert_to_mp4(mp3_file: str, vtt_file: str, mp4_file: str) -> tuple[bool, s
 def convert_chunk_to_mp4(chunk_num: int, epub_filename: str, output_dir: str, 
                         total_chunks: int) -> tuple[int, bool, str]:
     """
-    Convert a single chunk's MP3+VTT to MP4 in a thread.
+    Convert a single chunk's MP3+SRT to MP4 in a thread.
     
     Args:
         chunk_num: Chunk number
@@ -301,18 +301,18 @@ def convert_chunk_to_mp4(chunk_num: int, epub_filename: str, output_dir: str,
         Tuple of (chunk_num, success, message)
     """
     mp3_file = os.path.join(output_dir, f"{epub_filename}_part_{chunk_num:03d}.mp3")
-    vtt_file = os.path.join(output_dir, f"{epub_filename}_part_{chunk_num:03d}.vtt")
+    srt_file = os.path.join(output_dir, f"{epub_filename}_part_{chunk_num:03d}.srt")
     mp4_file = os.path.join(output_dir, f"{epub_filename}_part_{chunk_num:03d}.mp4")
     
     # Check if files exist
     if not os.path.exists(mp3_file):
         return (chunk_num, False, f"✗ MP3 file not found: {mp3_file}")
-    if not os.path.exists(vtt_file):
-        return (chunk_num, False, f"✗ VTT file not found: {vtt_file}")
+    if not os.path.exists(srt_file):
+        return (chunk_num, False, f"✗ SRT file not found: {srt_file}")
     
     thread_safe_print(f"[FFmpeg] Converting chunk {chunk_num}/{total_chunks} to MP4...")
     
-    success, message = convert_to_mp4(mp3_file, vtt_file, mp4_file)
+    success, message = convert_to_mp4(mp3_file, srt_file, mp4_file)
     thread_safe_print(f"  {message}")
     
     return (chunk_num, success, message)
@@ -331,8 +331,8 @@ def process_epub_to_tts(epub_path: str, output_dir: str = OUTPUT_DIR,
         output_dir: Directory to save output audio files
         voice: Voice to use for TTS
         max_threads: Maximum number of concurrent threads
-        generate_subtitles: Whether to generate VTT subtitle files
-        convert_to_mp4_flag: Whether to convert MP3+VTT to MP4
+        generate_subtitles: Whether to generate SRT subtitle files
+        convert_to_mp4_flag: Whether to convert MP3+SRT to MP4
         force_split: Force split by character count instead of chapters
         chunk_size: Maximum characters per chunk when splitting
     """
@@ -493,11 +493,11 @@ Common voices:
     # Flags
     parser.add_argument('-s', '--subtitles',
                        action='store_true',
-                       help='Generate VTT subtitle files for each audio chunk')
+                       help='Generate SRT subtitle files for each audio chunk')
     
     parser.add_argument('-m', '--mp4',
                        action='store_true',
-                       help='Convert MP3+VTT to MP4 with minimal video (requires --subtitles)')
+                       help='Convert MP3+SRT to MP4 with minimal video (requires --subtitles)')
     
     parser.add_argument('-f', '--force-split',
                        action='store_true',
@@ -577,7 +577,7 @@ Common voices:
         -o, --output           输出目录 (默认: tts_output)
         -t, --threads          线程数 (默认: 8)
         -c, --chunk-size       分块大小 (默认: 10000)
-        -s, --subtitles        生成 VTT 字幕
+        -s, --subtitles        生成 SRT 字幕
         -m, --mp4              转换为 MP4 (需要 --subtitles)
         -f, --force-split      强制按字数拆分
         -h, --help             显示帮助信息
@@ -589,11 +589,11 @@ Common voices:
 
 输出文件 / Output Files:
     - book_part_001.mp3     # 音频文件
-    - book_part_001.vtt     # 字幕文件 (使用 -s/--subtitles)
+    - book_part_001.srt     # 字幕文件 (使用 -s/--subtitles)
     - book_part_001.mp4     # 视频文件 (使用 -m/--mp4)
 
 工具脚本 / Helper Scripts:
-    # 批量转换已有的 MP3+VTT 为 MP4
+    # 批量转换已有的 MP3+SRT 为 MP4
     python convert_to_mp4.py tts_output 8
 
 依赖安装 / Install Dependencies:
