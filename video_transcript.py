@@ -153,6 +153,7 @@ def transcribe_audio_fast(audio_path, model_size="medium", language="zh", device
     transcribe_kwargs = {
         "audio": audio_path,
         "beam_size": 5,
+        "initial_prompt": "简体中文",
         "vad_filter": True,
         "vad_parameters": dict(min_silence_duration_ms=500)
     }
