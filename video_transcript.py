@@ -3,7 +3,7 @@
 """
 视频音轨提取与字幕生成工具 (跨平台加速版)
 支持: macOS (Metal), Linux (CUDA), Windows (CPU)
-需要安装: pip install faster-whisper ffmpeg-python
+需要安装: pip install faster-whisper ffmpeg-python opencc
 系统需要安装 FFmpeg
 """
 
@@ -15,6 +15,9 @@ import ffmpeg
 from datetime import timedelta
 from tqdm import tqdm
 import time
+from opencc import OpenCC
+
+cc_converter = OpenCC('t2s')  # 繁体转简体转换器
 
 
 def detect_device():
@@ -210,7 +213,7 @@ def transcribe_audio_fast(audio_path, model_size="medium", language="zh", device
 
 def save_srt(segments, srt_path):
     """
-    将识别结果保存为 SRT 字幕文件
+    将识别结果保存为 SRT 字幕文件，自动将繁体转换为简体
     
     Args:
         segments: faster-whisper 识别的片段列表
@@ -228,8 +231,9 @@ def save_srt(segments, srt_path):
             end_time = format_timestamp(segment.end)
             f.write(f"{start_time} --> {end_time}\n")
             
-            # 字幕内容
-            f.write(f"{segment.text.strip()}\n\n")
+            # 字幕内容，转换为简体中文
+            simplified_text = cc_converter.convert(segment.text.strip())
+            f.write(f"{simplified_text}\n\n")
     
     print(f"✓ SRT 字幕已保存: {srt_path}")
 
