@@ -1,0 +1,4 @@
+edge-tts
+ebooklib
+beautifulsoup4
+lxml

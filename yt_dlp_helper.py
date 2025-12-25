@@ -66,7 +66,8 @@ def prompt_format_selector() -> str:
         fmt = input("Enter the format selector to use (-f): ").strip()
         if fmt:
             return fmt
-        print("Format selector cannot be empty.")
+        print("Format selector cannot be empty. Defaulting to '137+140'.")
+        return "137+140"
 
 
 def prompt_output_template() -> str:
